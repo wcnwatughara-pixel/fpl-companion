@@ -1,9 +1,13 @@
 /**
  * fplApi.js -- FPL API fetch layer
  *
- * All requests go through Vite's dev server proxy (/api/...),
+ * In development, requests go through Vite's dev server proxy (/api/...),
  * which forwards them to https://fantasy.premierleague.com/api/...
  * This avoids CORS errors because the browser only talks to localhost.
+ *
+ * In production (GitHub Pages), there's no proxy server, so requests go
+ * through a CORS proxy (corsproxy.io) since the FPL API doesn't allow
+ * direct cross-origin requests from browsers.
  *
  * Features:
  * - Automatic retry with exponential backoff (3 attempts)
@@ -23,13 +27,35 @@
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Build the full URL for an FPL API endpoint.
+ *
+ * In development, Vite's proxy handles CORS by forwarding /api/* to the
+ * real FPL server. In production (GitHub Pages), there's no proxy, so
+ * we route through a CORS proxy that wraps the full target URL.
+ *
+ * To swap proxies, just change the production return below. Options:
+ *   allorigins:  "https://api.allorigins.win/raw?url=" + encodeURIComponent(url)
+ *   corsproxy:   "https://corsproxy.io/?" + encodeURIComponent(url)
+ *   self-hosted: "https://your-worker.workers.dev/?url=" + encodeURIComponent(url)
+ *
+ * @param {string} path - API path like "/bootstrap-static/" or "/entry/123/"
+ * @returns {string} - Full URL ready for fetch()
+ */
+function fplUrl(path) {
+  if (import.meta.env.DEV) {
+    return `/api${path}`;
+  }
+  return `https://fpl-proxy-rho.vercel.app/api${path}`;
+}
+
+/**
  * Fetch a URL with retry logic.
  * If the request fails, wait progressively longer before retrying:
  *   attempt 1 failure -> wait 1s
  *   attempt 2 failure -> wait 2s
  *   attempt 3 failure -> give up and throw
  *
- * @param {string} url - The URL to fetch (should start with /api/)
+ * @param {string} url - The URL to fetch
  * @param {number} retries - How many times to retry on failure (default 3)
  * @returns {Promise<any>} - Parsed JSON response
  */
@@ -138,7 +164,7 @@ export async function fetchBootstrap(skipCache = false) {
     if (cached) return cached;
   }
 
-  const data = await fetchWithRetry("/api/bootstrap-static/");
+  const data = await fetchWithRetry(fplUrl("/bootstrap-static/"));
   cacheSet("fpl_bootstrap", data);
   return data;
 }
@@ -156,7 +182,7 @@ export async function fetchFixtures(skipCache = false) {
     if (cached) return cached;
   }
 
-  const data = await fetchWithRetry("/api/fixtures/");
+  const data = await fetchWithRetry(fplUrl("/fixtures/"));
   cacheSet("fpl_fixtures", data);
   return data;
 }
@@ -174,7 +200,7 @@ export async function fetchEntry(teamId, skipCache = false) {
     if (cached) return cached;
   }
 
-  const data = await fetchWithRetry(`/api/entry/${teamId}/`);
+  const data = await fetchWithRetry(fplUrl(`/entry/${teamId}/`));
   cacheSet("fpl_entry", data);
   return data;
 }
@@ -198,7 +224,7 @@ export async function fetchPicks(teamId, gameweek, skipCache = false) {
   }
 
   const data = await fetchWithRetry(
-    `/api/entry/${teamId}/event/${gameweek}/picks/`
+    fplUrl(`/entry/${teamId}/event/${gameweek}/picks/`)
   );
   cacheSet(cacheKey, data);
   return data;

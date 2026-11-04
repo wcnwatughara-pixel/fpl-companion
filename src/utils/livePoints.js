@@ -10,9 +10,29 @@
  * We use this to show per-player GW points on the Dashboard (PlayerCard)
  * and in the player detail view.
  *
+ * In development, requests go through Vite's dev proxy. In production
+ * (GitHub Pages), they go through a CORS proxy since the FPL API
+ * doesn't allow direct cross-origin browser requests.
+ *
  * The endpoint returns:
  *   { elements: [ { id: 1, stats: { total_points: 7, minutes: 90, ... } }, ... ] }
  */
+
+// ---------------------------------------------------------------------------
+// API base URL (shared pattern with fplApi.js)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the full URL for an FPL API endpoint.
+ * In dev, Vite proxies /api/* to the FPL server.
+ * In production, we route through allorigins.win to bypass CORS.
+ */
+function fplUrl(path) {
+  if (import.meta.env.DEV) {
+    return `/api${path}`;
+  }
+  return `https://fpl-proxy-rho.vercel.app/api${path}`;
+}
 
 // ---------------------------------------------------------------------------
 // Fetch live/completed GW points
@@ -29,7 +49,7 @@ export async function fetchLivePoints(gw) {
   if (!gw || gw < 1) return {};
 
   try {
-    const res = await fetch(`/api/event/${gw}/live/`);
+    const res = await fetch(fplUrl(`/event/${gw}/live/`));
     if (!res.ok) {
       console.warn(`[livePoints] Failed to fetch GW${gw} live data: ${res.status}`);
       return {};

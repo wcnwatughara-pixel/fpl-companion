@@ -11,7 +11,7 @@
  *    "Qualified" = 45+ SEASON minutes (not per-game).
  *
  * 2. COMPLETE: When a snapshotted GW's matches are all finished, fetch
- *    actual points from /api/event/{gw}/live/ and merge them in.
+ *    actual points from the live endpoint and merge them in.
  *    A snapshot is "complete" once actualPoints is populated.
  *
  * 3. SYNC: After capturing or completing a snapshot, queueSync() is
@@ -48,6 +48,18 @@ const STORAGE_PREFIX = "fpl_snapshot_";
 
 /** Minimum season minutes for a player to be included in a snapshot */
 const MIN_SEASON_MINUTES = 45;
+
+/**
+ * Build the full URL for an FPL API endpoint.
+ * In dev, Vite proxies /api/* to the FPL server.
+ * In production, we route through allorigins.win to bypass CORS.
+ */
+function fplUrl(path) {
+  if (import.meta.env.DEV) {
+    return `/api${path}`;
+  }
+  return `https://fpl-proxy-rho.vercel.app/api${path}`;
+}
 
 // ---------------------------------------------------------------------------
 // Snapshot capture
@@ -137,7 +149,7 @@ export function captureSnapshotIfNeeded(gw, deadlinePassed, players, picks) {
  * Complete a snapshot by merging in actual GW points.
  *
  * This should be called when a GW's matches have all finished.
- * Fetches live data from /api/event/{gw}/live/ and writes actualPoints
+ * Fetches live data from the FPL event endpoint and writes actualPoints
  * onto each snapshotted player.
  *
  * @param {number} gw - The gameweek to complete
@@ -155,7 +167,7 @@ export async function completeSnapshot(gw) {
   }
 
   try {
-    const res = await fetch(`/api/event/${gw}/live/`);
+    const res = await fetch(fplUrl(`/event/${gw}/live/`));
     if (!res.ok) {
       console.warn(`[snapshots] Failed to fetch GW${gw} actuals: ${res.status}`);
       return { completed: false, snapshot };
@@ -586,7 +598,7 @@ async function backfillSnapshotSquads(teamId) {
 
     // Try to fetch picks for this GW from the API
     try {
-      const res = await fetch(`/api/entry/${teamId}/event/${meta.gw}/picks/`);
+      const res = await fetch(fplUrl(`/entry/${teamId}/event/${meta.gw}/picks/`));
       if (!res.ok) continue;
 
       const picksData = await res.json();
